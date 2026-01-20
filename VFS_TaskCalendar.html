@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VFS TaskCalendar</title>
+    <style>
+        :root {
+            --bg-dark: #0a0b0c;
+            --panel-dark: #151719;
+            --text-main: #d1d2d3;
+            --border-gray: #2d3135;
+            --vfs-gold: #c5a059;
+            --vfs-silver: #a8adb3;
+            --color-normal: #2a7a4a;
+            --color-warning: #c58228;
+            --color-danger: #a93226;
+            --color-done: #4a4e52;
+            /* 土日の色設定 */
+            --color-sat: #5dade2; 
+            --color-sun: #ec7063;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(to right, #1a1c1e, #0a0b0c);
+            border-bottom: 1px solid var(--vfs-gold);
+            padding: 8px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .logo-area { display: flex; align-items: center; gap: 12px; }
+        .vfs-logo-box {
+            width: 32px; height: 32px;
+            background: linear-gradient(135deg, var(--vfs-silver), var(--vfs-gold));
+            border-radius: 2px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 900; color: #000; font-size: 0.8rem;
+            box-shadow: 0 0 10px rgba(197, 160, 89, 0.3);
+        }
+
+        .brand-info { display: flex; flex-direction: column; }
+        .product-name { font-weight: bold; font-size: 1rem; color: var(--vfs-gold); }
+        .brand-subname { font-size: 0.6rem; color: var(--vfs-silver); letter-spacing: 1px; opacity: 0.7; }
+
+        .tabs { display: flex; gap: 5px; }
+        .tab-btn {
+            background: #1a1c1e; border: 1px solid var(--border-gray);
+            color: var(--vfs-silver); padding: 6px 15px; cursor: pointer; font-size: 0.75rem;
+        }
+        .tab-btn.active { background: var(--vfs-gold); color: #000; border-color: var(--vfs-gold); font-weight: bold; }
+
+        .header-controls { display: flex; align-items: center; gap: 10px; }
+        .lang-select { background: #1a1c1e; color: var(--vfs-gold); border: 1px solid var(--border-gray); font-size: 0.7rem; padding: 2px 5px; cursor: pointer; }
+
+        .view-controls {
+            display: flex; align-items: center; gap: 15px; padding: 10px 20px;
+            background: #0f1112; border-bottom: 1px solid var(--border-gray); flex-shrink: 0;
+        }
+
+        .content-area { flex: 1; display: none; overflow-y: auto; padding: 15px; }
+        .content-area.active { display: block; }
+
+        .calendar-grid { display: grid; width: 100%; border-top: 1px solid var(--border-gray); border-left: 1px solid var(--border-gray); }
+        .cal-cell { border-right: 1px solid var(--border-gray); border-bottom: 1px solid var(--border-gray); background: var(--panel-dark); min-height: 120px; padding: 5px; }
+        
+        /* 日付フォントの改善 */
+        .date-label {
+            font-size: 0.95rem; /* 大きく */
+            font-weight: bold;
+            color: #ffffff;    /* 明るく */
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .task-bar { padding: 3px 6px; margin-bottom: 3px; font-size: 0.7rem; cursor: pointer; border-left: 3px solid transparent; background: #1e2124; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .kanban-flex { display: flex; gap: 15px; height: 100%; }
+        .kanban-col { flex: 1; background: #0f1112; border: 1px solid var(--border-gray); display: flex; flex-direction: column; }
+        .col-title { background: #1a1c1e; padding: 10px; text-align: center; color: var(--vfs-gold); font-weight: bold; font-size: 0.8rem; }
+        .drop-zone { flex: 1; padding: 10px; overflow-y: auto; }
+        .task-card { background: #1e2124; padding: 10px; margin-bottom: 10px; font-size: 0.8rem; cursor: pointer; border-left: 4px solid transparent; }
+
+        .wbs-container { display: flex; flex-direction: column; background: #0f1112; border: 1px solid var(--border-gray); }
+        .wbs-row { display: flex; border-bottom: 1px solid var(--border-gray); height: 40px; align-items: center; }
+        .wbs-label { width: 180px; padding: 0 10px; border-right: 1px solid var(--border-gray); font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .wbs-timeline { flex: 1; display: flex; position: relative; height: 100%; }
+        .wbs-day-col { flex: 1; border-right: 1px solid #1a1c1e; height: 100%; min-width: 40px; }
+        .wbs-bar { position: absolute; height: 20px; top: 10px; border-radius: 2px; cursor: pointer; }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); justify-content: center; align-items: center; z-index: 2000; }
+        .modal-content { background: var(--panel-dark); padding: 25px; border: 1px solid var(--vfs-gold); width: 450px; }
+        input, select { width: 100%; padding: 10px; margin: 5px 0 15px 0; background: #0a0b0c; border: 1px solid var(--border-gray); color: #fff; box-sizing: border-box; font-size: 0.9rem; }
+        label { font-size: 0.7rem; color: var(--vfs-silver); font-weight: bold; }
+        
+        button.action-btn { padding: 8px 15px; cursor: pointer; border: 1px solid var(--vfs-gold); background: transparent; color: var(--vfs-gold); font-weight: bold; font-size: 0.8rem; transition: 0.2s; }
+        button.action-btn:hover { background: var(--vfs-gold); color: #000; }
+        
+        /* 新規タスクボタンの横長・フォント調整 */
+        #btnNewTask {
+            min-width: 130px;
+            font-size: 0.75rem; /* 少し小さく */
+            white-space: nowrap;
+        }
+
+        .hidden-date { position: absolute; opacity: 0; width: 0; height: 0; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo-area">
+        <div class="vfs-logo-box">VFS</div>
+        <div class="brand-info">
+            <div class="product-name">VFS TaskCalendar</div>
+            <div class="brand-subname">VANILLA FIELD SOFTHOUSE</div>
+        </div>
+    </div>
+    <div class="tabs">
+        <button id="btn-tab-calendar" class="tab-btn active" onclick="switchTab('calendar')">CALENDAR</button>
+        <button id="btn-tab-kanban" class="tab-btn" onclick="switchTab('kanban')">KANBAN</button>
+        <button id="btn-tab-wbs" class="tab-btn" onclick="switchTab('wbs')">WBS</button>
+    </div>
+    <div class="header-controls">
+        <select class="lang-select" id="langSelect" onchange="changeLang()">
+            <option value="ja">JP</option>
+            <option value="en" selected>EN</option>
+        </select>
+        <button class="action-btn" onclick="openProperty()" style="background:var(--vfs-gold); color:#000;" id="btnNewTask">+ NEW TASK</button>
+        <button class="action-btn" onclick="setupSyncFile()" style="font-size: 0.7rem;" id="btnSync">SYNC</button>
+    </div>
+</header>
+
+<div class="view-controls" id="viewControls">
+    <select id="viewMode" onchange="render()" style="background: #1a1c1e; color: #fff; border: 1px solid var(--border-gray);">
+        <option value="month" id="optMonth">MONTHLY</option>
+        <option value="week" selected id="optWeek">WEEKLY</option>
+        <option value="day" id="optDay">DAILY</option>
+    </select>
+    <button class="action-btn" onclick="moveTime(-1)">PREV</button>
+    <span id="dateDisplay" style="font-weight: bold; min-width: 180px; text-align: center; color: var(--vfs-silver);"></span>
+    <button class="action-btn" onclick="moveTime(1)">NEXT</button>
+</div>
+
+<div id="calendarTab" class="content-area active"><div id="calendarGrid" class="calendar-grid"></div></div>
+<div id="kanbanTab" class="content-area">
+    <div class="kanban-flex">
+        <div class="kanban-col"><div class="col-title" id="titleTodo">TODO</div><div id="kb-todo" class="drop-zone" ondragover="allowDrop(event)" ondrop="dropToKb(event, 'todo')"></div></div>
+        <div class="kanban-col"><div class="col-title" id="titleDone">DONE</div><div id="kb-done" class="drop-zone" ondragover="allowDrop(event)" ondrop="dropToKb(event, 'done')"></div></div>
+    </div>
+</div>
+<div id="wbsTab" class="content-area"><div id="wbsContent" class="wbs-container"></div></div>
+
+<div id="propModal" class="modal">
+    <div class="modal-content">
+        <h3 style="color:var(--vfs-gold); margin-top:0;" id="modalHead">TASK PROPERTIES</h3>
+        <label id="lblTitle">TITLE</label><input type="text" id="taskTitle">
+        <div style="display:flex; gap:10px;">
+            <div style="flex:1;"><label id="lblStart">START DATE</label><input type="text" id="taskStartDisplay" readonly onclick="triggerDate('taskStart')"><input type="date" id="taskStart" class="hidden-date" onchange="syncDateInput('taskStart')"></div>
+            <div style="flex:1;"><label id="lblEnd">END DATE</label><input type="text" id="taskEndDisplay" readonly onclick="triggerDate('taskEnd')"><input type="date" id="taskEnd" class="hidden-date" onchange="syncDateInput('taskEnd')"></div>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <div style="flex:1;"><label id="lblTime">TIME</label><input type="time" id="taskTime" value="23:59"></div>
+            <div style="flex:1;"><label id="lblWarn">WARN (H)</label><input type="number" id="notifyH" value="3"></div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:15px;">
+            <button class="action-btn" onclick="saveTask()" style="flex:2; background:var(--vfs-gold); color:#000;" id="btnSave">SAVE</button>
+            <button class="action-btn" onclick="deleteTask()" id="btnDel" style="flex:1; border-color:var(--color-danger); color:var(--color-danger);">DELETE</button>
+            <button class="action-btn" onclick="closeModal()" style="flex:1; border-color:var(--border-gray);" id="btnCancel">CANCEL</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let tasks = [];
+    let currentBaseDate = new Date();
+    let editingTaskId = null;
+    let fileHandle = null;
+    let lastModified = 0;
+    let currentLang = 'en';
+
+    const i18n = {
+        ja: {
+            days: ['日','月','火','水','木','金','土'],
+            tabs: { calendar: 'カレンダー', kanban: 'カンバン', wbs: 'WBS' },
+            btns: { newTask: '+ 新規タスク', sync: '同期', save: '保存', del: '削除', cancel: '閉じる' },
+            labels: { title: 'タイトル', start: '開始日', end: '期限日', time: '時刻', warn: '警告(h)', todo: '未完了', done: '完了' },
+            modes: { month: '1ヶ月', week: '1週間', day: '1日' }
+        },
+        en: {
+            days: ['SUN','MON','TUE','WED','THU','FRI','SAT'],
+            tabs: { calendar: 'CALENDAR', kanban: 'KANBAN', wbs: 'WBS' },
+            btns: { newTask: '+ NEW TASK', sync: 'SYNC', save: 'SAVE', del: 'DELETE', cancel: 'CANCEL' },
+            labels: { title: 'TITLE', start: 'START', end: 'END', time: 'TIME', warn: 'WARN(H)', todo: 'TODO', done: 'DONE' },
+            modes: { month: 'MONTHLY', week: 'WEEKLY', day: 'DAILY' }
+        }
+    };
+
+    function changeLang() {
+        currentLang = document.getElementById('langSelect').value;
+        const t = i18n[currentLang];
+        document.getElementById('btn-tab-calendar').innerText = t.tabs.calendar;
+        document.getElementById('btn-tab-kanban').innerText = t.tabs.kanban;
+        document.getElementById('btn-tab-wbs').innerText = t.tabs.wbs;
+        document.getElementById('btnNewTask').innerText = t.btns.newTask;
+        document.getElementById('btnSync').innerText = t.btns.sync;
+        document.getElementById('lblTitle').innerText = t.labels.title;
+        document.getElementById('lblStart').innerText = t.labels.start;
+        document.getElementById('lblEnd').innerText = t.labels.end;
+        document.getElementById('lblTime').innerText = t.labels.time;
+        document.getElementById('lblWarn').innerText = t.labels.warn;
+        document.getElementById('btnSave').innerText = t.btns.save;
+        document.getElementById('btnDel').innerText = t.btns.del;
+        document.getElementById('btnCancel').innerText = t.btns.cancel;
+        document.getElementById('titleTodo').innerText = t.labels.todo;
+        document.getElementById('titleDone').innerText = t.labels.done;
+        document.getElementById('optMonth').innerText = t.modes.month;
+        document.getElementById('optWeek').innerText = t.modes.week;
+        document.getElementById('optDay').innerText = t.modes.day;
+        render();
+    }
+
+    function getTaskColor(task) {
+        if (task.status === 'done') return 'var(--color-done)';
+        const deadline = new Date(`${task.end}T${task.time}`);
+        const diffHrs = (deadline - new Date()) / (1000 * 60 * 60);
+        if (diffHrs < 0) return 'var(--color-danger)';
+        if (diffHrs <= (task.notifyH || 3)) return 'var(--color-warning)';
+        return 'var(--color-normal)';
+    }
+
+    async function setupSyncFile() {
+        try {
+            [fileHandle] = await window.showOpenFilePicker();
+            const file = await fileHandle.getFile();
+            tasks = JSON.parse(await file.text() || "[]");
+            lastModified = file.lastModified;
+            render();
+            setInterval(async () => {
+                const f = await fileHandle.getFile();
+                if (f.lastModified > lastModified) {
+                    tasks = JSON.parse(await f.text() || "[]");
+                    lastModified = f.lastModified;
+                    render();
+                }
+            }, 30000);
+        } catch (e) {}
+    }
+
+    async function saveToFile() {
+        localStorage.setItem('vfs_tasks', JSON.stringify(tasks));
+        if (!fileHandle) return;
+        try {
+            const writable = await fileHandle.createWritable();
+            await writable.write(JSON.stringify(tasks, null, 2));
+            await writable.close();
+        } catch (e) {}
+    }
+
+    function triggerDate(id) { document.getElementById(id).showPicker(); }
+    function syncDateInput(id) {
+        const val = document.getElementById(id).value;
+        if(!val) return;
+        const d = new Date(val);
+        document.getElementById(id + 'Display').value = `${val.replace(/-/g,'/')} (${i18n[currentLang].days[d.getDay()]})`;
+    }
+
+    function render() {
+        const mode = document.getElementById('viewMode').value;
+        const grid = document.getElementById('calendarGrid');
+        const display = document.getElementById('dateDisplay');
+        grid.innerHTML = '';
+        
+        if(mode === 'month') {
+            grid.style.gridTemplateColumns = 'repeat(7, 1fr)';
+            const y = currentBaseDate.getFullYear(), m = currentBaseDate.getMonth();
+            display.innerText = `${y}．${m + 1}`;
+            const first = new Date(y, m, 1).getDay(), last = new Date(y, m + 1, 0).getDate();
+            for(let i=0; i<first; i++) grid.appendChild(createCell(''));
+            for(let d=1; d<=last; d++) {
+                const ds = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                grid.appendChild(createCell(d, ds, new Date(y, m, d).getDay()));
+            }
+        } else if(mode === 'week') {
+            grid.style.gridTemplateColumns = 'repeat(7, 1fr)';
+            const start = new Date(currentBaseDate); start.setDate(currentBaseDate.getDate() - currentBaseDate.getDay());
+            display.innerText = `${start.getFullYear()}．${start.getMonth()+1}/${start.getDate()} ～`;
+            for(let i=0; i<7; i++) {
+                const d = new Date(start); d.setDate(start.getDate() + i);
+                const ds = d.toISOString().split('T')[0];
+                grid.appendChild(createCell(`${d.getMonth()+1}/${d.getDate()} (${i18n[currentLang].days[d.getDay()]})`, ds, d.getDay()));
+            }
+        } else {
+            grid.style.gridTemplateColumns = '1fr';
+            const ds = currentBaseDate.toISOString().split('T')[0];
+            display.innerText = `${ds} (${i18n[currentLang].days[currentBaseDate.getDay()]})`;
+            grid.appendChild(createCell(display.innerText, ds, currentBaseDate.getDay()));
+        }
+        renderKanban(); renderWBS();
+    }
+
+    function createCell(label, ds, dayIdx = -1) {
+        const cell = document.createElement('div');
+        cell.className = 'cal-cell';
+        
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'date-label';
+        labelDiv.innerText = label;
+        
+        // 土日の色分け
+        if (dayIdx === 0) labelDiv.style.color = 'var(--color-sun)';
+        if (dayIdx === 6) labelDiv.style.color = 'var(--color-sat)';
+        
+        cell.appendChild(labelDiv);
+
+        if(ds) {
+            cell.ondblclick = () => openProperty(null, ds);
+            cell.ondragover = (e) => e.preventDefault();
+            cell.ondrop = async (e) => {
+                const id = e.dataTransfer.getData('taskId');
+                const t = tasks.find(x => x.id == id);
+                if(t) { t.start = ds; t.end = ds; await saveToFile(); render(); }
+            };
+            tasks.filter(t => ds >= t.start && ds <= t.end).forEach(t => {
+                const bar = document.createElement('div');
+                bar.className = 'task-bar'; bar.innerText = t.title;
+                bar.style.borderColor = getTaskColor(t);
+                bar.onclick = () => openProperty(t.id);
+                cell.appendChild(bar);
+            });
+        }
+        return cell;
+    }
+
+    function renderKanban() {
+        const tZone = document.getElementById('kb-todo'), dZone = document.getElementById('kb-done');
+        tZone.innerHTML = ''; dZone.innerHTML = '';
+        tasks.forEach(t => {
+            const card = document.createElement('div');
+            card.className = 'task-card'; card.innerText = t.title; card.draggable = true;
+            card.style.borderColor = getTaskColor(t);
+            card.ondragstart = (e) => e.dataTransfer.setData('taskId', t.id);
+            card.onclick = () => openProperty(t.id);
+            if(t.status === 'todo') tZone.appendChild(card); else dZone.appendChild(card);
+        });
+    }
+
+    function renderWBS() {
+        const container = document.getElementById('wbsContent'); container.innerHTML = '';
+        const startDay = new Date(); startDay.setHours(0,0,0,0);
+        const headerRow = document.createElement('div'); headerRow.className = 'wbs-row';
+        headerRow.innerHTML = `<div class="wbs-label" style="background:#1a1c1e; color:var(--vfs-gold);">${i18n[currentLang].labels.title}</div>`;
+        const timelineHeader = document.createElement('div'); timelineHeader.className = 'wbs-timeline';
+        for(let i=0; i<14; i++) {
+            const d = new Date(startDay); d.setDate(startDay.getDate() + i);
+            const col = document.createElement('div'); col.className = 'wbs-day-col'; col.style.fontSize = '0.55rem'; col.style.textAlign = 'center';
+            const dIdx = d.getDay();
+            let dColor = 'inherit';
+            if(dIdx === 0) dColor = 'var(--color-sun)';
+            if(dIdx === 6) dColor = 'var(--color-sat)';
+            col.innerHTML = `<span style="color:${dColor}">${d.getDate()}<br>(${i18n[currentLang].days[dIdx]})</span>`;
+            timelineHeader.appendChild(col);
+        }
+        headerRow.appendChild(timelineHeader); container.appendChild(headerRow);
+        tasks.forEach(t => {
+            const row = document.createElement('div'); row.className = 'wbs-row';
+            row.innerHTML = `<div class="wbs-label">${t.title}</div>`;
+            const timeline = document.createElement('div'); timeline.className = 'wbs-timeline';
+            const s = new Date(t.start), e = new Date(t.end);
+            const ds = (s - startDay) / 86400000, dl = ((e - s) / 86400000) + 1;
+            if(ds + dl > 0 && ds < 14) {
+                const bar = document.createElement('div'); bar.className = 'wbs-bar';
+                bar.style.backgroundColor = getTaskColor(t);
+                bar.style.left = Math.max(0, ds) * (100 / 14) + '%';
+                bar.style.width = Math.min(14 - ds, dl) * (100 / 14) + '%';
+                bar.onclick = () => openProperty(t.id);
+                timeline.appendChild(bar);
+            }
+            row.appendChild(timeline); container.appendChild(row);
+        });
+    }
+
+    function openProperty(id = null, ds = null) {
+        editingTaskId = id;
+        if(id) {
+            const t = tasks.find(x => x.id == id);
+            document.getElementById('taskTitle').value = t.title;
+            document.getElementById('taskStart').value = t.start;
+            document.getElementById('taskEnd').value = t.end;
+            document.getElementById('taskTime').value = t.time;
+            document.getElementById('notifyH').value = t.notifyH;
+            document.getElementById('btnDel').style.display = 'block';
+        } else {
+            const today = ds || new Date().toISOString().split('T')[0];
+            document.getElementById('taskTitle').value = '';
+            document.getElementById('taskStart').value = today;
+            document.getElementById('taskEnd').value = today;
+            document.getElementById('taskTime').value = '23:59';
+            document.getElementById('notifyH').value = 3;
+            document.getElementById('btnDel').style.display = 'none';
+        }
+        syncDateInput('taskStart'); syncDateInput('taskEnd');
+        document.getElementById('propModal').style.display = 'flex';
+        document.getElementById('taskTitle').focus();
+    }
+
+    async function saveTask() {
+        const data = {
+            id: editingTaskId || Date.now(),
+            title: document.getElementById('taskTitle').value || "NO TITLE",
+            start: document.getElementById('taskStart').value,
+            end: document.getElementById('taskEnd').value,
+            time: document.getElementById('taskTime').value,
+            notifyH: document.getElementById('notifyH').value,
+            status: editingTaskId ? tasks.find(x=>x.id==editingTaskId).status : 'todo'
+        };
+        if(editingTaskId) tasks[tasks.findIndex(x=>x.id==editingTaskId)] = data;
+        else tasks.push(data);
+        await saveToFile(); closeModal(); render();
+    }
+
+    async function deleteTask() { tasks = tasks.filter(x => x.id != editingTaskId); await saveToFile(); closeModal(); render(); }
+    function switchTab(t) {
+        document.querySelectorAll('.tab-btn, .content-area').forEach(el => el.classList.remove('active'));
+        document.getElementById(`btn-tab-${t}`).classList.add('active');
+        document.getElementById(`${t}Tab`).classList.add('active');
+        document.getElementById('viewControls').style.display = (t === 'calendar') ? 'flex' : 'none';
+        render();
+    }
+    function allowDrop(e) { e.preventDefault(); }
+    async function dropToKb(e, s) {
+        const id = e.dataTransfer.getData('taskId');
+        const t = tasks.find(x => x.id == id);
+        if(t) { t.status = s; await saveToFile(); render(); }
+    }
+    function moveTime(n) {
+        const m = document.getElementById('viewMode').value;
+        if(m === 'month') currentBaseDate.setMonth(currentBaseDate.getMonth() + n);
+        else if(m === 'week') currentBaseDate.setDate(currentBaseDate.getDate() + (n * 7));
+        else currentBaseDate.setDate(currentBaseDate.getDate() + n);
+        render();
+    }
+    function closeModal() { document.getElementById('propModal').style.display = 'none'; }
+
+    window.onload = () => {
+        const s = localStorage.getItem('vfs_tasks');
+        if(s) tasks = JSON.parse(s);
+        changeLang();
+    };
+</script>
+</body>
+</html>
